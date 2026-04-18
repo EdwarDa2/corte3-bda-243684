@@ -95,11 +95,13 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
-app.get('/api/mascotas/buscar', async (req, res) => {
+app.get('/api/mascotas/buscar', rlsMiddleware, async (req, res) => {
     const { nombre } = req.query;
     console.log(`Petición de búsqueda recibida: "${nombre}"`);
 
     if (!nombre) {
+        await req.dbClient.query('ROLLBACK');
+        req.dbClient.release();
         return res.status(400).json({ error: 'El parámetro nombre es requerido' });
     }
 
@@ -111,7 +113,8 @@ app.get('/api/mascotas/buscar', async (req, res) => {
             WHERE m.nombre ILIKE $1
         `;
         const values = [`%${nombre}%`];
-        const result = await pool.query(query, values);
+        const result = await req.dbClient.query(query, values);
+        await req.dbClient.query('COMMIT');
 
         if (result.rows.length === 0) {
             return res.status(404).json({ mensaje: 'No se encontraron mascotas con ese criterio' });
@@ -119,8 +122,11 @@ app.get('/api/mascotas/buscar', async (req, res) => {
 
         res.status(200).json(result.rows);
     } catch (error) {
+        await req.dbClient.query('ROLLBACK');
         console.error('Error en búsqueda:', error);
         res.status(500).json({ error: 'Error interno al buscar mascotas' });
+    } finally {
+        req.dbClient.release();
     }
 });
 

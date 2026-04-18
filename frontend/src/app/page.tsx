@@ -19,7 +19,7 @@ interface VacunacionPendiente {
   mascota_id: number;
   nombre_mascota: string;
   especie: string;
-  dueno: string;
+  nombre_dueno: string;
   ultima_vacuna: string;
   dias_desde_ultima_vacuna: number;
 }
@@ -73,7 +73,17 @@ export default function DashboardVeterinaria() {
   const buscarMascotas = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(`http://localhost:3000/api/mascotas/buscar?nombre=${busqueda}`);
+      const headers: HeadersInit = {
+        'x-rol': usuarioActivo.rol,
+      };
+      if (usuarioActivo.vetId) {
+        headers['x-vet-id'] = usuarioActivo.vetId;
+      }
+
+      const response = await fetch(
+        `http://localhost:3000/api/mascotas/buscar?nombre=${busqueda}`,
+        { headers }
+      );
       if (!response.ok) {
         setMascotas([]);
         return;
@@ -196,7 +206,7 @@ export default function DashboardVeterinaria() {
             <ul className="space-y-2">
               {vacunaciones.map((vac, index) => (
                 <li key={index} className="bg-white p-3 border rounded shadow-sm text-gray-900 flex justify-between">
-                  <span>💉 <strong>{vac.nombre_mascota}</strong> ({vac.especie}) - Dueño: {vac.dueno}</span>
+                  <span>💉 <strong>{vac.nombre_mascota}</strong> ({vac.especie}) - Dueño: {vac.nombre_dueno}</span>
                   <span className="text-red-600 font-semibold text-sm">
                     {vac.dias_desde_ultima_vacuna > 0 
                       ? `Hace ${vac.dias_desde_ultima_vacuna} días` 
