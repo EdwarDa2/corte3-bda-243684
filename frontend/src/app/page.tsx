@@ -59,20 +59,25 @@ export default function DashboardVeterinaria() {
     }
   };
 
-  const buscarMascotas = async (e: React.FormEvent) => {
+ const buscarMascotas = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const response = await fetch(`http://localhost:3000/api/mascotas/buscar?nombre=${busqueda}`);
+      if (!response.ok) {
+        setMascotas([]);
+        return;
+      }
+      
       const data: Mascota[] = await response.json();
       setMascotas(data);
     } catch (error) {
       console.error("Error al buscar:", error);
+      setMascotas([]);
     }
   };
 
   useEffect(() => {
     fetchCitas();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioActivo]);
 
   return (
