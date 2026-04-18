@@ -3,7 +3,6 @@
 -- ==============================================================================
 CREATE OR REPLACE VIEW v_mascotas_vacunacion_pendiente AS
 WITH UltimaVacuna AS (
-    -- El CTE calcula la fecha más reciente de vacunación por cada mascota
     SELECT 
         mascota_id,
         MAX(fecha_aplicacion) AS fecha_ultima_vacuna
@@ -23,7 +22,6 @@ SELECT
     END AS prioridad
 FROM mascotas m
 JOIN duenos d ON m.dueno_id = d.id
--- El LEFT JOIN es crucial para que no se filtren las mascotas que no existen en el CTE
 LEFT JOIN UltimaVacuna uv ON m.id = uv.mascota_id
 WHERE uv.fecha_ultima_vacuna IS NULL 
    OR (CURRENT_DATE - uv.fecha_ultima_vacuna) > 365;

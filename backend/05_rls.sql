@@ -7,7 +7,7 @@ ALTER TABLE mascotas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vacunas_aplicadas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE citas ENABLE ROW LEVEL SECURITY;
 
--- 5.2 Limpiar políticas previas (por si re-ejecutas)
+-- 5.2 Limpiar políticas previas 
 DROP POLICY IF EXISTS rls_admin_mascotas ON mascotas;
 DROP POLICY IF EXISTS rls_recepcion_mascotas ON mascotas;
 DROP POLICY IF EXISTS rls_vet_mascotas ON mascotas;
@@ -42,9 +42,7 @@ USING (
 -- ==============================================================================
 -- Administrador ve todas las vacunas
 CREATE POLICY rls_admin_vacunas ON vacunas_aplicadas FOR ALL TO rol_administrador USING (true);
--- Nota: Recepción no tiene política aquí porque ya le negamos el acceso con REVOKE/no GRANT en el archivo 04
 
--- Veterinarios solo ven las vacunas de mascotas que ellos atienden
 CREATE POLICY rls_vet_vacunas ON vacunas_aplicadas FOR ALL TO rol_veterinario
 USING (
     EXISTS (
@@ -62,7 +60,6 @@ USING (
 CREATE POLICY rls_admin_citas ON citas FOR ALL TO rol_administrador USING (true);
 CREATE POLICY rls_recepcion_citas ON citas FOR ALL TO rol_recepcion USING (true);
 
--- Veterinarios solo ven citas donde ellos son el veterinario asignado
 CREATE POLICY rls_vet_citas ON citas FOR ALL TO rol_veterinario
 USING (
     veterinario_id = current_setting('app.current_vet_id', true)::int

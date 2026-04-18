@@ -36,7 +36,6 @@ BEGIN
     END IF;
 
     -- 3 Validar el día de descanso del veterinario
-    -- Usamos ISODOW (1=lunes, 7=domingo) para evitar problemas de idioma (locales) en Docker
     v_num_dia := EXTRACT(ISODOW FROM p_fecha_hora);
     v_dia_cita := CASE v_num_dia
         WHEN 1 THEN 'lunes' WHEN 2 THEN 'martes' WHEN 3 THEN 'miércoles'

@@ -21,10 +21,8 @@ BEGIN
     FROM veterinarios
     WHERE id = NEW.veterinario_id;
 
-    -- Formateamos la fecha para que coincida con el ejemplo (ej: 15/04/2026)
     v_fecha_formateada := TO_CHAR(NEW.fecha_hora, 'DD/MM/YYYY');
 
-    -- Registramos el evento en el log auditable
     INSERT INTO historial_movimientos (tipo, referencia_id, descripcion)
     VALUES (
         'CITA_AGENDADA',

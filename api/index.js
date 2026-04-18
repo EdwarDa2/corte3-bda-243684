@@ -4,11 +4,10 @@ const { Pool } = require('pg');
 const redis = require('redis');
 require('dotenv').config();
 
-
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors()); 
+app.use(cors());
 app.use(express.json());
 app.use((req, res, next) => {
     res.on('finish', () => {
@@ -18,14 +17,13 @@ app.use((req, res, next) => {
 });
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || 
+    connectionString: process.env.DATABASE_URL ||
         `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`
 });
 
 pool.on('error', (err) => {
     console.error('Error inesperado en el pool de PostgreSQL:', err);
 });
-
 
 const redisClient = redis.createClient({
     url: process.env.REDIS_URL || 'redis://localhost:6379'
@@ -42,12 +40,38 @@ redisClient.on('error', (err) => console.error('Error en el cliente de Redis:', 
     }
 })();
 
+const rlsMiddleware = async (req, res, next) => {
+    const rol = req.headers['x-rol'];
+    const vetId = req.headers['x-vet-id'];
+
+    if (!rol) {
+        return res.status(401).json({ error: 'Acceso denegado. Se requiere autenticación (Rol).' });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        await client.query(`SET LOCAL ROLE ${rol}`);
+
+        if (rol === 'rol_veterinario' && vetId) {
+            await client.query(`SET LOCAL app.current_vet_id = ${vetId}`);
+        }
+
+        req.dbClient = client;
+        next();
+    } catch (error) {
+        await client.query('ROLLBACK');
+        client.release();
+        console.error('Error de seguridad RLS:', error);
+        res.status(403).json({ error: 'Rol inválido o permisos insuficientes' });
+    }
+};
+
 app.get('/api/health', async (req, res) => {
     try {
-        
         const dbResult = await pool.query('SELECT NOW() as tiempo_actual');
-        
-        await redisClient.set('ping', 'pong', { EX: 10 }); 
+        await redisClient.set('ping', 'pong', { EX: 10 });
         const cacheResult = await redisClient.get('ping');
 
         res.json({
@@ -61,10 +85,6 @@ app.get('/api/health', async (req, res) => {
         res.status(500).json({ error: 'Fallo en las conexiones internas' });
     }
 });
-
-// ==============================================================================
-// 1. ENDPOINT: Búsqueda de Mascotas (Defensa contra SQL Injection)
-// ==============================================================================
 
 app.get('/api/mascotas/buscar', async (req, res) => {
     const { nombre } = req.query;
@@ -91,20 +111,30 @@ app.get('/api/mascotas/buscar', async (req, res) => {
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error en búsqueda:', error);
-        res.status(500).json({ error: 'Error interno del servidor al buscar mascotas' });
+        res.status(500).json({ error: 'Error interno al buscar mascotas' });
     }
 });
 
-// ==============================================================================
-// 2. ENDPOINT: Vacunaciones Pendientes (Implementación de Redis Cache)
-// ==============================================================================
+app.get('/api/citas', rlsMiddleware, async (req, res) => {
+    try {
+        const result = await req.dbClient.query('SELECT * FROM citas');
+        await req.dbClient.query('COMMIT');
+        res.status(200).json(result.rows);
+    } catch (error) {
+        await req.dbClient.query('ROLLBACK');
+        console.error('Error al obtener citas:', error);
+        res.status(500).json({ error: 'Error al consultar las citas' });
+    } finally {
+        req.dbClient.release();
+    }
+});
 
 app.get('/api/reportes/vacunacion-pendiente', async (req, res) => {
     const CACHE_KEY = 'reporte:vacunaciones_pendientes';
 
     try {
         const cachedData = await redisClient.get(CACHE_KEY);
-        
+
         if (cachedData) {
             console.log('Sirviendo desde Redis Cache');
             return res.status(200).json(JSON.parse(cachedData));
@@ -115,7 +145,6 @@ app.get('/api/reportes/vacunacion-pendiente', async (req, res) => {
         const result = await pool.query(query);
 
         await redisClient.set(CACHE_KEY, JSON.stringify(result.rows), { EX: 60 });
-
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error en el reporte:', error);
@@ -123,55 +152,29 @@ app.get('/api/reportes/vacunacion-pendiente', async (req, res) => {
     }
 });
 
-// ==============================================================================
-// 3. MIDDLEWARE: Autenticación y Contexto RLS (Protección de Connection Pool)
-// ==============================================================================
+app.post('/api/vacunas', rlsMiddleware, async (req, res) => {
+    const { mascota_id, vacuna_id } = req.body; 
+    const veterinario_id = req.headers['x-vet-id'];
 
-const rlsMiddleware = async (req, res, next) => {
-    const rol = req.headers['x-rol']; 
-    const vetId = req.headers['x-vet-id'];
-
-    if (!rol) {
-        return res.status(401).json({ error: 'Acceso denegado. Se requiere autenticación (Rol).' });
+    if (!mascota_id || !vacuna_id || !veterinario_id) {
+        return res.status(400).json({ error: 'Faltan datos de la vacuna o credenciales del veterinario' });
     }
 
-    const client = await pool.connect();
-
     try {
-        await client.query('BEGIN');
-        await client.query(`SET LOCAL ROLE ${rol}`);
-        
-        if (rol === 'rol_veterinario' && vetId) {
-            await client.query(`SET LOCAL app.current_vet_id = ${vetId}`);
-        }
-
-        req.dbClient = client;
-        next(); 
-    } catch (error) {
-        await client.query('ROLLBACK');
-        client.release();
-        console.error('Error de seguridad RLS:', error);
-        res.status(403).json({ error: 'Rol inválido o permisos insuficientes' });
-    }
-};
-
-// ==============================================================================
-// 4. ENDPOINT: Ver Citas (Demostración de RLS en acción)
-// ==============================================================================
-// Pasamos 'rlsMiddleware' antes de ejecutar la lógica de la ruta
-
-app.get('/api/citas', rlsMiddleware, async (req, res) => {
-    try {
-        const result = await req.dbClient.query('SELECT * FROM citas');
+        const query = `INSERT INTO vacunas_aplicadas (mascota_id, vacuna_id, veterinario_id, fecha_aplicacion) VALUES ($1, $2, $3, NOW()) RETURNING id`;
+        const result = await req.dbClient.query(query, [mascota_id, vacuna_id, veterinario_id]);
         await req.dbClient.query('COMMIT');
-        
-        res.status(200).json(result.rows);
+
+        console.log('🧹 Invalidando caché de vacunaciones pendientes...');
+        await redisClient.del('reporte:vacunaciones_pendientes');
+
+        res.status(201).json({ mensaje: 'Vacuna aplicada con éxito', id: result.rows[0].id });
     } catch (error) {
         await req.dbClient.query('ROLLBACK');
-        console.error('Error al obtener citas:', error);
-        res.status(500).json({ error: 'Error al consultar las citas' });
+        console.error('Error al aplicar vacuna:', error);
+        res.status(500).json({ error: 'Error interno al aplicar vacuna' });
     } finally {
-        req.dbClient.release(); 
+        req.dbClient.release();
     }
 });
 

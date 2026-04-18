@@ -19,9 +19,7 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO rol_administrador;
 GRANT SELECT ON duenos, mascotas, veterinarios TO rol_recepcion;
 GRANT SELECT, INSERT, UPDATE ON citas TO rol_recepcion;
 GRANT USAGE, SELECT ON SEQUENCE citas_id_seq TO rol_recepcion;
--- Permiso explícito para usar el procedure de agendar
 GRANT EXECUTE ON PROCEDURE sp_agendar_cita(INT, INT, TIMESTAMP, TEXT, OUT INT) TO rol_recepcion;
--- Nota: Intencionalmente NO se da GRANT sobre vacunas_aplicadas ni inventario_vacunas.
 
 -- 4.4 Permisos: Veterinario
 -- "Registrar nuevas citas y aplicar vacunas a sus mascotas"
@@ -31,11 +29,9 @@ GRANT USAGE, SELECT ON SEQUENCE citas_id_seq TO rol_veterinario;
 GRANT SELECT, INSERT ON vacunas_aplicadas TO rol_veterinario;
 GRANT USAGE, SELECT ON SEQUENCE vacunas_aplicadas_id_seq TO rol_veterinario;
 GRANT SELECT ON inventario_vacunas TO rol_veterinario;
--- Permiso explícito para usar el procedure de agendar
 GRANT EXECUTE ON PROCEDURE sp_agendar_cita(INT, INT, TIMESTAMP, TEXT, OUT INT) TO rol_veterinario;
 
--- 4.5 Crear Usuarios de prueba (Para demostrar el sistema en tu cuaderno y en la app)
--- Estos usuarios son los que usaremos desde el frontend/backend de Node.js
+-- 4.5 Crear Usuarios de prueba
 CREATE USER usr_admin WITH PASSWORD 'admin123';
 GRANT rol_administrador TO usr_admin;
 
