@@ -36,17 +36,17 @@ docker-compose stop
 
 Cláusula SQL:
 ```sql
-CREATE POLICY rls_vet_mascotas ON mascotas 
-FOR SELECT TO rol_veterinario 
+CREATE POLICY rls_vet_mascotas ON mascotas FOR ALL TO rol_veterinario
 USING (
-  id IN (
-    SELECT mascota_id 
-    FROM vet_atiende_mascota 
-    WHERE veterinario_id = current_setting('app.current_vet_id')::INT
-  )
+    EXISTS (
+        SELECT 1 
+        FROM vet_atiende_mascota vam 
+        WHERE vam.mascota_id = mascotas.id 
+          AND vam.vet_id = current_setting('app.current_vet_id', true)::int
+    )
 );
 ```
-Explicación: Esta política intercepta cualquier SELECT que haga un veterinario a la tabla mascotas. Utiliza una subconsulta hacia la tabla puente (vet_atiende_mascota) para verificar si el ID de la mascota está vinculado al ID del veterinario que hizo la petición (el cual inyectamos temporalmente en app.current_vet_id). Si no coincide, la fila se oculta automáticamente.
+Explicacion:Esta política intercepta cualquier operación que haga un veterinario sobre la tabla mascotas. Para cada fila, verifica en la tabla puente vet_atiende_mascota si existe un registro que enlace esa mascota (vam.mascota_id = mascotas.id) con el ID del veterinario activo en la sesión (vam.vet_id = current_setting('app.current_vet_id', true)::int). Si no existe ese enlace, la fila se oculta automáticamente. El true como segundo argumento de current_setting evita que PostgreSQL lance un error si la variable no está definida — en ese caso devuelve NULL y la condición falla de forma segura, ocultando todas las filas.
 
 ### 2. Cualquiera que sea la estrategia que elegiste para identificar al veterinario actual en RLS, tiene un vector de ataque posible. ¿Cuál es? ¿Tu sistema lo previene? ¿Cómo?
 

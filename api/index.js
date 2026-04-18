@@ -44,8 +44,16 @@ const rlsMiddleware = async (req, res, next) => {
     const rol = req.headers['x-rol'];
     const vetId = req.headers['x-vet-id'];
 
-    if (!rol) {
-        return res.status(401).json({ error: 'Acceso denegado. Se requiere autenticación (Rol).' });
+    const rolesPermitidos = ['rol_administrador', 'rol_recepcion', 'rol_veterinario'];
+    if (!rol || !rolesPermitidos.includes(rol)) {
+        return res.status(403).json({ error: 'Rol inválido o no autorizado.' });
+    }
+
+    if (rol === 'rol_veterinario') {
+        const vetIdSeguro = parseInt(vetId, 10);
+        if (!vetId || isNaN(vetIdSeguro) || vetIdSeguro <= 0) {
+            return res.status(400).json({ error: 'x-vet-id inválido. Debe ser un número entero positivo.' });
+        }
     }
 
     const client = await pool.connect();
@@ -54,8 +62,9 @@ const rlsMiddleware = async (req, res, next) => {
         await client.query('BEGIN');
         await client.query(`SET LOCAL ROLE ${rol}`);
 
-        if (rol === 'rol_veterinario' && vetId) {
-            await client.query(`SET LOCAL app.current_vet_id = ${vetId}`);
+        if (rol === 'rol_veterinario') {
+            const vetIdSeguro = parseInt(vetId, 10);
+           await client.query(`SET LOCAL app.current_vet_id = ${vetIdSeguro}`);
         }
 
         req.dbClient = client;
@@ -136,11 +145,11 @@ app.get('/api/reportes/vacunacion-pendiente', async (req, res) => {
         const cachedData = await redisClient.get(CACHE_KEY);
 
         if (cachedData) {
-            console.log('Sirviendo desde Redis Cache');
+            console.log('[CACHE HIT] vacunacion_pendiente');
             return res.status(200).json(JSON.parse(cachedData));
         }
 
-        console.log('Sirviendo desde PostgreSQL');
+        console.log('[CACHE MISS] vacunacion_pendiente - consultando PostgreSQL');
         const query = `SELECT * FROM v_mascotas_vacunacion_pendiente`;
         const result = await pool.query(query);
 
@@ -153,7 +162,7 @@ app.get('/api/reportes/vacunacion-pendiente', async (req, res) => {
 });
 
 app.post('/api/vacunas', rlsMiddleware, async (req, res) => {
-    const { mascota_id, vacuna_id } = req.body; 
+    const { mascota_id, vacuna_id } = req.body;
     const veterinario_id = req.headers['x-vet-id'];
 
     if (!mascota_id || !vacuna_id || !veterinario_id) {
@@ -165,7 +174,7 @@ app.post('/api/vacunas', rlsMiddleware, async (req, res) => {
         const result = await req.dbClient.query(query, [mascota_id, vacuna_id, veterinario_id]);
         await req.dbClient.query('COMMIT');
 
-        console.log('🧹 Invalidando caché de vacunaciones pendientes...');
+        console.log('[CACHE INVALIDADO] vacunacion_pendiente - nueva vacuna aplicada');
         await redisClient.del('reporte:vacunaciones_pendientes');
 
         res.status(201).json({ mensaje: 'Vacuna aplicada con éxito', id: result.rows[0].id });
