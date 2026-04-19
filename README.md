@@ -79,11 +79,11 @@ Si fuera demasiado alto (ej. 1 hora): El personal de recepción vería a pacient
 ### 5. Tu frontend manda input del usuario al backend. Elige un endpoint crítico y pega la línea exacta donde el backend maneja ese input antes de enviarlo a la base de datos. Explica qué protege esa línea y de qué. Indica archivo y número de línea.
 
 Endpoint: Búsqueda de Mascotas (``GET /api/mascotas/buscar``)
-Archivo: `api/index.js` (Línea 118 aprox.)
+Archivo: `api/index.js` (Línea 116 aprox.)
 Código de Protección:
 ```js
 const values = [`%${nombre}%`];
-const result = await pool.query(query, values);
+const result = await req.dbClient.query(query, values);
 ```
 Explicación: Esta línea protege estrictamente contra ataques de SQL Injection (SQLi). Al usar el arreglo `values` para mapear el placeholder `$1` en la consulta, el driver de `pg` separa por completo los datos del código ejecutable. Cualquier intento de inyección (como un `; DROP TABLE mascotas;`) es tratado literalmente como una cadena de texto inofensiva.
 
